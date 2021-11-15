@@ -1,0 +1,269 @@
+#coding:utf-8
+
+
+# start Django 环境
+import os
+import time
+import random
+import datetime
+import sys
+import django
+import requests
+import math
+from decimal import Decimal
+BASE_DIR = os.path.dirname(os.path.split(os.path.realpath(__file__))[0])
+sys.path.insert(0, BASE_DIR)
+sys.path.insert(0, "%s/site-packages/" % BASE_DIR)
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "defi_quanti.settings")
+django.setup()
+# end Django 环境
+
+
+from web3 import Web3
+from trade.utils import *
+
+
+web3 = Web3(Web3.HTTPProvider('https://bsc-dataseed2.defibit.io'))
+print(web3.isConnected())
+
+#个人钱包私钥
+# personal_wallet=
+# private_key = 
+
+
+#nonce值
+# nonce=web3.eth.get_transaction_count(personal_wallet)
+#token地址
+# tokenA = '0xbb238fce6e2ee90781cd160c9c6eaf3a4cfad801'
+# tokenB = '55d398326f99059ff775485246999027b3197955'
+# tokenC='e9e7cea3dedca5984780bafc599bd69add087d56'
+# tokenB1=web3.toChecksumAddress(tokenB)
+# tokenC1=web3.toChecksumAddress(tokenC)
+
+BAGEL = get_coin("TBAGEL", "BSC") # tokenA
+USDT = get_coin("USDT", "BSC") # tokenB
+BUSD = get_coin("BUSD", "BSC") # tokenC
+
+#交易对
+# path = [tokenB1,tokenC1,tokenA1]
+#交易时间
+# deadline = int(time.time()) + 86444
+
+Bagel_PancakePair_contract_obj = get_contract("TBagel-PancakePair", "BSC")
+Bagel_PancakePair_contract = web3.eth.contract(address=Bagel_PancakePair_contract_obj.address, abi=Bagel_PancakePair_contract_obj.data)
+
+PancakeRouter_contract_obj = get_contract("PANCAKEROUTER-V2", "BSC")
+PancakeRouter_contract = web3.eth.contract(address=PancakeRouter_contract_obj.address, abi=PancakeRouter_contract_obj.data)
+
+# aa = Bagel_PancakePair_contract.functions.getReserves().call()
+
+
+def bagels_price():
+    contract = get_contract("TBAGEL-PANCAKEPAIR", "BSC")
+    contract1=web3.eth.contract(address=contract.address, abi=contract.data)
+    t = contract1.functions.getReserves().call()
+    c = t[1] / t[0]
+    return c
+
+#发送交易
+def transaction(coin_list, a_coin_sell_num):
+    """
+        
+    """
+    path = []
+    for coin in coin_list:
+        path.append(coin.address)
+
+    a_coin = coin_list[0]
+    b_coin = coin_list[1]
+
+    [pool_bagel_num, pool_busd_num, _t] = Bagel_PancakePair_contract.functions.getReserves().call()
+
+    pool_bagel_num_decimal = Decimal("%s" % pool_bagel_num) / Decimal("%s" % 10**18)
+    pool_busd_num_decimal = Decimal("%s" % pool_busd_num) / Decimal("%s" % 10**18)
+    k = pool_bagel_num_decimal * pool_busd_num_decimal
+
+    print("pool_bagel_num_decimal: %s pool_busd_num_decimal:%s" % (pool_bagel_num_decimal, pool_busd_num_decimal))
+    b_coin_unit_price = 0
+
+    if a_coin.symbol == "BUSD":
+        # 买入 计算BUSD的数量
+        # t_busd_num = Decimal("%s" % math.sqrt(k * obj_price))
+        # a_coin_num = (t_busd_num - pool_busd_num_decimal) / Decimal("0.9975")
+        # a_coin_num = Decimal("%s" % int(a_coin_num * Decimal("100.0")))/Decimal("100.0")
+        # a_coin_num = int(a_coin_num * 100)
+        # a_coin_num = (t_busd_num - pool_busd_num_decimal) / Decimal("0.9975")
+        # b_coin_num = pool_bagel_num_decimal - k / t_busd_num
+        # b_coin_unit_price = pool_bagel_num_decimal/pool_busd_num_decimal
+        x = pool_busd_num_decimal
+        y = pool_bagel_num_decimal
+    elif a_coin.symbol == "TBAGEL":
+        # 卖出Bagel
+        # t_bagel_num = math.sqrt(k/obj_price)
+        # a_coin_num = t_bagel_num - pool_bagel_num
+        # b_coin_num = pool_busd_num - k/t_bagel_num
+        x = pool_bagel_num_decimal
+        y = pool_busd_num_decimal
+    
+    # a_coin_num = Decimal("1")
+    # print("K:", k)
+    # print("y:", y)
+    # print("x:", x)
+    # print("a_coin_num:", a_coin_num)
+    # print(a_coin_num * Decimal("0.9975"))
+    y1 = y - k / (x + a_coin_sell_num * Decimal("0.9975"))
+    b_coin_num = Decimal("%s" % int(y1 * Decimal("100.0")))/Decimal("100.0")
+
+    # y1 = y - k / (x + x1 * (1-p));
+
+    # a_coin_num = Decimal("1")
+    # b_coin_num = Decimal("2.45")
+    # _a_coin_num = Decimal(" %s " % int(a_coin_num * 100))
+    a_coin_num2 = int(a_coin_num * Decimal("%s" % 10**18))
+    a_coin_num = str(a_coin_num)
+    b_coin_num2 = int(b_coin_num * Decimal("%s" % 10**18))
+    b_coin_num = str(b_coin_num)
+    # b_coin_num2 = int(Decimal(" %s " % int(y1 * 100)) * Decimal("%s" % 10**16))
+
+    gas = 280000
+    gasPrice = web3.toWei('6', 'gwei')
+    # act_gas = gas * gasPrice ** 10**-18
+    # print("act_gas: %s" % act_gas)
+    act_gas = Decimal("%s" % gas) * Decimal("%s" % gasPrice) * Decimal("%s" % 10**-18)
+    act_gas = "%s" % act_gas
+    act_gas = act_gas.rstrip("0")
+
+    print("a_coin.symbol:%s, a_coin_num:%s, :%s" % (a_coin.symbol, a_coin_num2, a_coin_num))
+    print("b_coin.symbol:%s, b_coin_num:%s : %s" % (b_coin.symbol, b_coin_num2, b_coin_num))
+    # return None
+    wallet = get_wallet(["%s>=%s" % (a_coin.symbol, a_coin_num), "BNB>=%s" % act_gas])
+    # wallet = get_wallet(id=1)
+    if not wallet:
+        print("没有满足条件的钱包了")
+        return
+    
+    deadline = int(time.time()) + 86444 # todo 疑问：这里为什么要这么做？
+    # tx = PancakeRouter_contract.functions.swapExactTokensForTokens(a_coin_num2, b_coin_num2, path, wallet.address, deadline).buildTransaction({
+    #     'gas': gas, # 动态查询
+    #     'gasPrice': gasPrice, # 动态查询
+    #     'nonce':  wallet.get_nonce(),
+    # })
+
+    # #进行签名
+    # signed_tx = web3.eth.account.signTransaction(tx, wallet.get_private_key())
+    # tx_hash = web3.eth.sendRawTransaction(signed_tx.rawTransaction)
+    # print(tx_hash.hex())
+    # # 增加钱包nonce
+    # wallet.add_nonce(1)
+
+
+    # path = [a_coin.address, b_coin.address] # [busd的合约地址, bagel的合约地址]
+
+    tx = PancakeRouter_contract.functions.swapExactTokensForTokens(a_coin_num2, b_coin_num2, path, wallet.address, deadline).buildTransaction({
+        'gas': gas, # 动态查询
+        'gasPrice': gasPrice, # 动态查询
+        'nonce':  wallet.get_nonce(),
+    })
+
+    #进行签名
+    signed_tx = web3.eth.account.signTransaction(tx, wallet.get_private_key())
+    tx_hash = web3.eth.sendRawTransaction(signed_tx.rawTransaction)
+    print("tx_hash: %s" % tx_hash.hex())
+    # 增加钱包nonce
+    wallet.add_nonce(1)
+
+    #输出哈希
+
+    # 保存交易
+    # todo 存入数据库
+    data = {
+        "network":"BSC", # 交易所属网络
+        "tx_hash": tx_hash.hex(), # 交易hash 一开始没有， 需要模拟一个
+
+        "a_coin":a_coin, # a币的对象
+        "a_num":a_coin_num, # a币的数量
+        "a_u_unit_price":1, # todo a 币对U的单价或者BUSD的单价
+
+        "b_coin":b_coin, #  (选填) b币的对象
+        "b_num":b_coin_num, #  (选填) b币的数量
+        "b_u_unit_price":int(b_coin_unit_price * 10**8), #  todo (选填) b币对U的单价或者BUSD的单价
+        "b_u_unit_price_str":str(b_coin_unit_price), #  todo (选填) b币对U的单价或者BUSD的单价
+
+        "from_wallet":wallet, # 来源钱包  from_wallet 和 from_address 只需要其中一个就可以了
+        "from_address":wallet.address, # 来源钱包地址
+
+        "to_address":PancakeRouter_contract.address, # todo 这里需要改进吗？梳理一下逻辑 交易的 合约地址
+
+        "status": 1, #（选填） 交易状态 默认是:1 , ((-2, "链上失败"), (0, "无"), (1, "保存到数据库"), (3, "提交上链中"), (5, "已提交上链"), (10, "完成，链上确认成功"))
+        "fee": str(Decimal("%s" % a_coin_num) * Decimal("0.0025")), # (选填) 交易手续费 做备份记录一共花掉了多少手续费
+        "gas": act_gas, # 交易gas费 这里的gas费是 提交上链的transaction里面  gas * gasPrice * 10**-18
+    }
+
+    trans = transaction_add(data)
+    print(trans.id)
+    # time.sleep(10)
+
+
+# Upper rail price Lower rail price
+
+
+#进行循环
+trading_strategy = get_trading_strategy(11)
+trading_strategy = get_trading_strategy("tbagel_hupan_a", "bsc")
+
+# 上轨价格
+upper_price = Decimal(trading_strategy.val("upper_rail_price"))
+# 下轨价格
+lower_price = Decimal(trading_strategy.val("lower_rail_price"))
+
+# 当日BUSD最大使用量
+max_busd_num = Decimal(trading_strategy.val("max_busd_num"))
+# 当日策略最大使用量BAGEL
+max_bagel_num = Decimal(trading_strategy.val("max_bagel_num"))
+
+# 最小多少分钟交易次数
+min_time_trade = Decimal(trading_strategy.val("min_time_trade"))
+# 最大多少分钟交易次数
+max_time_trade = Decimal(trading_strategy.val("max_time_trade"))
+
+# 单笔最大买入成交数量BUSD
+one_transaction_max_buy_num = Decimal(trading_strategy.val("one_transaction_max_buy_num"))
+# 单笔最小买入成交数量BUSD
+one_transaction_min_buy_num = Decimal(trading_strategy.val("one_transaction_min_buy_num"))
+
+# 单笔最大卖出成交数量BAGEL
+one_transaction_max_sell_num = Decimal(trading_strategy.val("one_transaction_max_sell_num"))
+# 单笔最小卖出成交数量BAGEL
+one_transaction_min_sell_num = Decimal(trading_strategy.val("one_transaction_min_sell_num"))
+
+
+bagel_price = bagels_price()
+
+p = random.randint(int(lower_price*1000), int(upper_price*1000))
+obj_price = p/1000.0 # 目标价格
+obj_price = 0.45
+obj_price = Decimal("%s" % obj_price)
+obj_price = Decimal("%s" % (bagel_price + 0.00001))
+print("bagel_price:%s, obj_price:%s, upper_price: %s , lower_price: %s" % (bagel_price, obj_price, upper_price, lower_price))
+
+
+now = datetime.datetime.now()
+
+
+# 隔壁
+if now.minute % 5 == 0:
+    # transaction([BUSD, BAGEL], obj_price)
+    if bagel_price > upper_price and max_bagel_num :
+        # 卖出BAGEL
+        sell_num = (round(random.uniform(one_transaction_min_sell_num, one_transaction_max_sell_num)))
+        #单笔卖出bagel数量范围
+        transaction([BAGEL, BUSD], sell_num)
+        #time_sleep = (round(random.uniform(min_time_trade,max_time_trade)))
+        # time.sleep(time_sleep)
+    elif bagel_price < lower_price and max_busd_num :
+        # 买入BAGEL
+        sell_num = (round(random.uniform(one_transaction_min_buy_num,one_transaction_max_buy_num)))
+        ##单笔卖入bagel花费的busd数量范围
+        transaction([BUSD, BAGEL], sell_num)
+        time_sleep = (round(random.uniform(min_time_trade,max_time_trade)))
+        # time.sleep(time_sleep)
